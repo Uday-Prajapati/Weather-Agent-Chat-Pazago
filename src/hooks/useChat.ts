@@ -78,7 +78,37 @@ export const useChat = () => {
 
   const processWeatherAgentResponse = async (response: Response, assistantMessage: Message) => {
     const data = await response.json();
-    const text = data?.content || '';
+
+    const pickEmoji = (code?: number, desc?: string): string => {
+      const d = (desc || '').toLowerCase();
+      if (code != null) {
+        if ([0,1].includes(code)) return '☀️';
+        if ([2].includes(code)) return '🌤️';
+        if ([3].includes(code)) return '☁️';
+        if ([45,48].includes(code)) return '🌫️';
+        if ([51,53,55,61,63,65,80,81,82].includes(code)) return '🌧️';
+        if ([66,67].includes(code)) return '🌧️';
+        if ([71,73,75,77,85,86].includes(code)) return '🌨️';
+        if ([95,96,99].includes(code)) return '⛈️';
+      }
+      if (/(sun|clear)/.test(d)) return '☀️';
+      if (/partly|mainly/i.test(d)) return '🌤️';
+      if (/cloud/i.test(d)) return '☁️';
+      if (/rain|drizzle/i.test(d)) return '🌧️';
+      if (/snow/i.test(d)) return '🌨️';
+      if (/thunder/i.test(d)) return '⛈️';
+      return '🌡️';
+    };
+
+    let text = data?.content || '';
+    if (data?.location && data?.current) {
+      const city = [data.location.name, data.location.country].filter(Boolean).join(', ');
+      const temp = data.current.temperature != null ? `${data.current.temperature}°C` : 'N/A';
+      const cond = data.current.description || 'Unknown conditions';
+      const emoji = pickEmoji(data.current.code, data.current.description);
+      text = `The current weather in ${city} is ${temp}, ${cond}. ${emoji}`;
+    }
+
     setState(prev => ({
       ...prev,
       messages: prev.messages.map(msg =>
