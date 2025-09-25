@@ -161,11 +161,151 @@ export const useChat = () => {
       addAssistantOnly('⚠️ Please enter a valid message.');
       return;
     }
+    // If message contains multiple lines, process each sequentially
+    const parts = trimmed.split(/\r?\n+/).map(p => p.trim()).filter(Boolean);
 
+    const processOne = async (textInput: string) => {
+      let assistantId: string | null = null;
+      try {
+        abortControllerRef.current = new AbortController();
+
+        // CANNED RESPONSES & VALIDATION
+        const isGreeting = /^(hi|hello|hey)[!.\s]*$/i.test(textInput);
+        const hasLetters = /[a-zA-Z]/.test(textInput);
+        const onlySpecials = !hasLetters && /[^\s]/.test(textInput);
+        const looksLikeGibberish = textInput.length > 80 && !/[a-zA-Z]{2,}/.test(textInput);
+
+        const addAssistant = (text: string) => {
+          setState(prev => ({
+            ...prev,
+            messages: prev.messages.map(m => m.id === userMessage.id ? { ...m, status: 'sent' } : m).concat({
+              id: `assistant-${Date.now()}`,
+              role: 'assistant',
+              content: text,
+              timestamp: new Date(),
+            }),
+            isLoading: false,
+          }));
+        };
+
+        // Handle offline immediately with assistant reply
+        if (state.isOffline) {
+          addAssistant('❌ Unable to fetch weather data. Please check your internet connection.');
+          return;
+        }
+
+        // Greeting
+        if (isGreeting) {
+          addAssistant('Hello! How can I help you today?');
+          return;
+        }
+
+        // Only special characters
+        if (onlySpecials) {
+          addAssistant("❌ Sorry, I couldn't understand that. Please try again.");
+          return;
+        }
+
+        // Looks like gibberish/very long nonsense
+        if (looksLikeGibberish) {
+          addAssistant('❌ Sorry, I could not recognize the location. Please try again with a valid city name.');
+          return;
+        }
+
+        const messageHistory = [
+          ...state.messages.map(msg => ({
+            role: msg.role as 'user' | 'assistant',
+            content: msg.content,
+          })),
+          {
+            role: 'user' as const,
+            content: textInput,
+          }
+        ];
+
+        const assistantMessage: Message = {
+          id: `assistant-${Date.now()}`,
+          role: 'assistant',
+          content: '',
+          timestamp: new Date(),
+          isStreaming: true,
+        };
+        assistantId = assistantMessage.id;
+
+        setState(prev => ({
+          ...prev,
+          messages: [...prev.messages, assistantMessage],
+        }));
+
+        try {
+          const response = await sendMessageToWeatherAgent(messageHistory);
+          // Mark user as sent upon successful request dispatch
+          setState(prev => ({
+            ...prev,
+            messages: prev.messages.map(m => m.id === userMessage.id ? { ...m, status: 'sent' } : m),
+          }));
+          await processWeatherAgentResponse(response, assistantMessage);
+        } catch (error: any) {
+          // Map specific errors to friendly assistant messages
+          const msg = (error?.message || '').toLowerCase();
+          let mapped: string | null = null;
+          if (msg.includes('404') || msg.includes('city not found')) {
+            mapped = '❌ Sorry, I could not recognize the location. Please try again with a valid city name.';
+          } else if (msg.includes('failed to fetch') || msg.includes('network') || msg.includes('offline')) {
+            mapped = '❌ Unable to fetch weather data. Please check your internet connection.';
+          }
+          if (mapped) {
+            setState(prev => ({
+              ...prev,
+              isLoading: false,
+              messages: prev.messages.map(m => m.id === userMessage.id ? { ...m, status: 'failed' } : m).map(m =>
+                m.id === assistantMessage.id ? { ...m, content: mapped, isStreaming: false } : m
+              ),
+              error: null,
+            }));
+            return;
+          }
+          throw error;
+        }
+
+      } catch (error: any) {
+        if (error.name === 'AbortError') {
+          return; // Request was cancelled, don't show error
+        }
+
+        setState(prev => ({
+          ...prev,
+          isLoading: false,
+          error: error.message || 'Failed to get weather information. Please try again.',
+          messages: prev.messages.map(m =>
+            m.id === userMessage.id ? { ...m, status: 'failed' } : m
+          ).filter(msg => (assistantId ? msg.id !== assistantId : true)),
+        }));
+      }
+    };
+
+    // If multiple lines, process each; else process the single trimmed message
+    if (parts.length > 1) {
+      for (const part of parts) {
+        // add a user bubble for each part
+        const userMessage: Message = {
+          id: `user-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,
+          role: 'user',
+          content: part,
+          timestamp: new Date(),
+          status: 'sending',
+        };
+        setState(prev => ({ ...prev, messages: [...prev.messages, userMessage], isLoading: true, error: null }));
+        await processOne(part);
+      }
+      return;
+    }
+
+    // Single message path (original flow)
     let assistantId: string | null = null;
     try {
       abortControllerRef.current = new AbortController();
-      
+
       // CANNED RESPONSES & VALIDATION
       const isGreeting = /^(hi|hello|hey)[!.\s]*$/i.test(trimmed);
       const hasLetters = /[a-zA-Z]/.test(trimmed);
@@ -185,25 +325,18 @@ export const useChat = () => {
         }));
       };
 
-      // Handle offline immediately with assistant reply
       if (state.isOffline) {
         addAssistant('❌ Unable to fetch weather data. Please check your internet connection.');
         return;
       }
-
-      // Empty handled above; greeting
       if (isGreeting) {
         addAssistant('Hello! How can I help you today?');
         return;
       }
-
-      // Only special characters
       if (onlySpecials) {
         addAssistant("❌ Sorry, I couldn't understand that. Please try again.");
         return;
       }
-
-      // Looks like gibberish/very long nonsense
       if (looksLikeGibberish) {
         addAssistant('❌ Sorry, I could not recognize the location. Please try again with a valid city name.');
         return;
@@ -236,14 +369,12 @@ export const useChat = () => {
 
       try {
         const response = await sendMessageToWeatherAgent(messageHistory);
-        // Mark user as sent upon successful request dispatch
         setState(prev => ({
           ...prev,
           messages: prev.messages.map(m => m.id === userMessage.id ? { ...m, status: 'sent' } : m),
         }));
         await processWeatherAgentResponse(response, assistantMessage);
       } catch (error: any) {
-        // Map specific errors to friendly assistant messages
         const msg = (error?.message || '').toLowerCase();
         let mapped: string | null = null;
         if (msg.includes('404') || msg.includes('city not found')) {
@@ -266,10 +397,7 @@ export const useChat = () => {
       }
 
     } catch (error: any) {
-      if (error.name === 'AbortError') {
-        return; // Request was cancelled, don't show error
-      }
-
+      if (error.name === 'AbortError') return;
       setState(prev => ({
         ...prev,
         isLoading: false,
