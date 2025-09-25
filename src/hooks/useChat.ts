@@ -90,7 +90,7 @@ export const useChat = () => {
 
   const sendMessage = useCallback(async (content: string) => {
     const trimmed = content.trim();
-    if (!trimmed || state.isLoading) return;
+    if (state.isLoading) return;
 
     // Cancel any ongoing request
     if (abortControllerRef.current) {
@@ -111,6 +111,26 @@ export const useChat = () => {
       isLoading: true,
       error: null,
     }));
+
+    // Helper to append only an assistant reply (no user message)
+    const addAssistantOnly = (text: string) => {
+      setState(prev => ({
+        ...prev,
+        messages: prev.messages.concat({
+          id: `assistant-${Date.now()}`,
+          role: 'assistant',
+          content: text,
+          timestamp: new Date(),
+        }),
+        isLoading: false,
+      }));
+    };
+
+    // Empty message → friendly warning
+    if (!trimmed) {
+      addAssistantOnly('⚠️ Please enter a valid message.');
+      return;
+    }
 
     let assistantId: string | null = null;
     try {
