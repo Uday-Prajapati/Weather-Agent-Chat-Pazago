@@ -18,6 +18,8 @@ export const ChatWindow: React.FC = () => {
     retryLastMessage,
     startNewThread,
     switchThread,
+    dismissError,
+    isOffline,
   } = useChat();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -27,9 +29,7 @@ export const ChatWindow: React.FC = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const dismissError = () => {
-    // Error will be cleared automatically on next message send
-  };
+  // Error dismiss now comes from hook
 
   const [isDark, setIsDark] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -122,7 +122,7 @@ export const ChatWindow: React.FC = () => {
       <ChatInput
         onSendMessage={sendMessage}
         isLoading={isLoading}
-        disabled={!!error}
+        disabled={!!error || !!isOffline}
       />
     </div>
   );

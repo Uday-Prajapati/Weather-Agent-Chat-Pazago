@@ -13,6 +13,7 @@ export const useChat = () => {
     isLoading: false,
     error: null,
     threadId: THREAD_ID,
+    isOffline: !navigator.onLine,
   });
   const [threadList, setThreadList] = useState<string[]>([]);
 
@@ -38,6 +39,18 @@ export const useChat = () => {
     localStorage.setItem('threads', JSON.stringify(threadList));
     localStorage.setItem(`thread:${state.threadId}`, JSON.stringify({ messages: state.messages }));
   }, [state.threadId, state.messages, threadList]);
+
+  // Track offline/online state
+  useEffect(() => {
+    const handleOnline = () => setState(prev => ({ ...prev, isOffline: false }));
+    const handleOffline = () => setState(prev => ({ ...prev, isOffline: true }));
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   const sendMessageToWeatherAgent = async (messages: Array<{role: 'user' | 'assistant', content: string}>) => {
     const lastUser = [...messages].reverse().find(m => m.role === 'user');
@@ -77,6 +90,13 @@ export const useChat = () => {
 
   const sendMessage = useCallback(async (content: string) => {
     if (!content.trim() || state.isLoading) return;
+    if (state.isOffline) {
+      setState(prev => ({
+        ...prev,
+        error: 'You are offline. Please check your internet connection.',
+      }));
+      return;
+    }
 
     // Cancel any ongoing request
     if (abortControllerRef.current) {
@@ -155,6 +175,10 @@ export const useChat = () => {
     }
   }, [state.messages, state.isLoading]);
 
+  const dismissError = useCallback(() => {
+    setState(prev => ({ ...prev, error: null }));
+  }, []);
+
   const clearChat = useCallback(() => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -232,5 +256,6 @@ export const useChat = () => {
     switchThread,
     toggleReaction,
     retryLastMessage,
+    dismissError,
   };
 };

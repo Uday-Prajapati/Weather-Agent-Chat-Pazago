@@ -16,6 +16,7 @@ export interface ChatState {
   isLoading: boolean;
   error: string | null;
   threadId: string;
+  isOffline?: boolean;
 }
 
 export interface WeatherApiRequest {

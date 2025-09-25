@@ -268,8 +268,50 @@ Try these weather queries to test the interface:
 
 - API rate limiting may cause temporary delays
 - Long messages may take time to stream completely
-- Network connectivity affects real-time experience
-- Chat history cleared on page refresh (could add persistence)
+- Network connectivity affects real-time experience (now shows offline error and disables input)
+- Chat history cleared on page refresh (per-thread persistence via localStorage is implemented)
+
+## Evaluation Criteria 📊
+
+- **Technical Implementation — 40%**
+  - Quality of React implementation, component architecture, reusability
+  - State management with custom hook and thread persistence
+  - Proper use of hooks and API integration, error handling
+- **User Experience — 30%**
+  - Usability, intuitiveness, responsiveness, visual consistency
+  - Loading states, typing indicator, user feedback, disabled states
+- **Code Quality — 20%**
+  - Readability, maintainability, performance considerations
+  - Adherence to best practices and documentation
+- **Innovation & Polish — 10%**
+  - Creative problem solving, attention to detail, bonus features
+
+## Sample Test Cases 🧪
+
+Include steps, expected, and actual result when you test.
+
+### Test Case 1 — Basic Interaction
+- Steps: Open the app. Send message: "What's the weather in London?"
+- Expected: Agent returns weather for London (temperature, condition, forecast). No UI overflow.
+
+### Test Case 2 — Error Handling (offline)
+- Steps: Disable network (or simulate offline). Send any message.
+- Expected: App shows a clear network/offline error and does not crash. Retry enabled when back online.
+
+### Test Case 3 — Multiple Messages
+- Steps: Send several messages in sequence (3–5 different queries).
+- Expected: Conversation remains intact, messages render in order, agent responds to each.
+
+### Test Case 4 — Edge Cases
+- Subcase A — Very long messages
+  - Steps: Send an extremely long message (several paragraphs).
+  - Expected: UI wraps/scrolls; response ok or helpful message if truncated.
+- Subcase B — Empty messages
+  - Steps: Press send with empty input.
+  - Expected: App prevents sending and keeps button disabled.
+- Subcase C — Special characters
+  - Steps: Send messages with emojis, HTML tags, and special characters (<script>, 😀, &<>).
+  - Expected: App safely renders as plain text; no XSS, no layout breaks.
 
 ## 🔮 Future Enhancements
 
