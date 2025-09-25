@@ -1,8 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { Message, ChatState } from '../types/chat';
 
-// Backend endpoint (Open-Meteo via our Node server)
-const WEATHER_API_ENDPOINT = 'http://localhost:3001/api/weather-full';
+// Backend endpoint (relative for prod on Vercel; localhost used in dev via proxy)
+const WEATHER_API_ENDPOINT = '/api/weather-full';
 
 // Roll number as thread ID
 const THREAD_ID = '70';
