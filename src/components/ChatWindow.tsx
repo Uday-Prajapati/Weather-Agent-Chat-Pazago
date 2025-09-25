@@ -122,7 +122,7 @@ export const ChatWindow: React.FC = () => {
       <ChatInput
         onSendMessage={sendMessage}
         isLoading={isLoading}
-        disabled={!!error || !!isOffline}
+        disabled={!!error}
       />
     </div>
   );

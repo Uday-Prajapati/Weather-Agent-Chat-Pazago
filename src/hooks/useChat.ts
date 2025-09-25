@@ -89,14 +89,8 @@ export const useChat = () => {
   };
 
   const sendMessage = useCallback(async (content: string) => {
-    if (!content.trim() || state.isLoading) return;
-    if (state.isOffline) {
-      setState(prev => ({
-        ...prev,
-        error: 'You are offline. Please check your internet connection.',
-      }));
-      return;
-    }
+    const trimmed = content.trim();
+    if (!trimmed || state.isLoading) return;
 
     // Cancel any ongoing request
     if (abortControllerRef.current) {
@@ -106,7 +100,7 @@ export const useChat = () => {
     const userMessage: Message = {
       id: `user-${Date.now()}`,
       role: 'user',
-      content: content.trim(),
+      content: trimmed,
       timestamp: new Date(),
       status: 'sending',
     };
@@ -122,6 +116,49 @@ export const useChat = () => {
     try {
       abortControllerRef.current = new AbortController();
       
+      // CANNED RESPONSES & VALIDATION
+      const isGreeting = /^(hi|hello|hey)[!.\s]*$/i.test(trimmed);
+      const hasLetters = /[a-zA-Z]/.test(trimmed);
+      const onlySpecials = !hasLetters && /[^\s]/.test(trimmed);
+      const looksLikeGibberish = trimmed.length > 80 && !/[a-zA-Z]{2,}/.test(trimmed);
+
+      const addAssistant = (text: string) => {
+        setState(prev => ({
+          ...prev,
+          messages: prev.messages.map(m => m.id === userMessage.id ? { ...m, status: 'sent' } : m).concat({
+            id: `assistant-${Date.now()}`,
+            role: 'assistant',
+            content: text,
+            timestamp: new Date(),
+          }),
+          isLoading: false,
+        }));
+      };
+
+      // Handle offline immediately with assistant reply
+      if (state.isOffline) {
+        addAssistant('❌ Unable to fetch weather data. Please check your internet connection.');
+        return;
+      }
+
+      // Empty handled above; greeting
+      if (isGreeting) {
+        addAssistant('Hello! How can I help you today?');
+        return;
+      }
+
+      // Only special characters
+      if (onlySpecials) {
+        addAssistant("❌ Sorry, I couldn't understand that. Please try again.");
+        return;
+      }
+
+      // Looks like gibberish/very long nonsense
+      if (looksLikeGibberish) {
+        addAssistant('❌ Sorry, I could not recognize the location. Please try again with a valid city name.');
+        return;
+      }
+
       const messageHistory = [
         ...state.messages.map(msg => ({
           role: msg.role as 'user' | 'assistant',
@@ -129,7 +166,7 @@ export const useChat = () => {
         })),
         {
           role: 'user' as const,
-          content: content.trim(),
+          content: trimmed,
         }
       ];
 
@@ -156,6 +193,25 @@ export const useChat = () => {
         }));
         await processWeatherAgentResponse(response, assistantMessage);
       } catch (error: any) {
+        // Map specific errors to friendly assistant messages
+        const msg = (error?.message || '').toLowerCase();
+        let mapped: string | null = null;
+        if (msg.includes('404') || msg.includes('city not found')) {
+          mapped = '❌ Sorry, I could not recognize the location. Please try again with a valid city name.';
+        } else if (msg.includes('failed to fetch') || msg.includes('network') || msg.includes('offline')) {
+          mapped = '❌ Unable to fetch weather data. Please check your internet connection.';
+        }
+        if (mapped) {
+          setState(prev => ({
+            ...prev,
+            isLoading: false,
+            messages: prev.messages.map(m => m.id === userMessage.id ? { ...m, status: 'failed' } : m).map(m =>
+              m.id === assistantMessage.id ? { ...m, content: mapped, isStreaming: false } : m
+            ),
+            error: null,
+          }));
+          return;
+        }
         throw error;
       }
 
@@ -173,7 +229,7 @@ export const useChat = () => {
         ).filter(msg => (assistantId ? msg.id !== assistantId : true)),
       }));
     }
-  }, [state.messages, state.isLoading]);
+  }, [state.messages, state.isLoading, state.isOffline]);
 
   const dismissError = useCallback(() => {
     setState(prev => ({ ...prev, error: null }));
